@@ -76,9 +76,15 @@ int main (int argc, char* argv[]) {
                     uint8_t ipInfo = v[ipStart];
                     uint8_t version = ipInfo >> 4;
                     uint8_t ipHeaderLength = (ipInfo & 0x0F) * 4;
+                    size_t transportStart = ipStart + ipHeaderLength;
                     printf("Source: %u.%u.%u.%u\n", v[ipStart+12], v[ipStart+13], v[ipStart+14], v[ipStart+15]);
                     printf("Destination: %u.%u.%u.%u\n", v[ipStart+16], v[ipStart+17], v[ipStart+18], v[ipStart+19]);
                     printf("Protocol: %u\n", v[ipStart+9]);
+                    uint8_t protocol = v[ipStart+9];
+                    if ((protocol == 6 || protocol == 17) && length >= 38) {
+                        printf("Source Port: %u\n", read16Bit(v, transportStart));
+                        printf("Dest Port: %u\n", read16Bit(v, transportStart + 2));
+                    }
                 }
                 ipv4Count++;
             } else if (etherType == 0x86DD) {
