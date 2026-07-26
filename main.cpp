@@ -4,6 +4,8 @@
 #include <fstream>
 #include <vector>
 
+
+//Read the file format field.
 static uint32_t read32Bit(const std::vector<uint8_t>& file, size_t at, bool swap) {
     uint32_t v;
     std::memcpy(&v, file.data() + at, 4);
@@ -15,6 +17,12 @@ static uint32_t read32Bit(const std::vector<uint8_t>& file, size_t at, bool swap
     }
     return v;
 }
+
+//Read the packet fields.
+static uint16_t read16Bit(const std::vector<uint8_t>& file, size_t at) {
+    return (uint16_t(file[at]) << 8) | uint16_t(file[at + 1]);
+}
+
 
 int main (int argc, char* argv[]) {
     // Grabs the header(8 bit)
@@ -53,14 +61,30 @@ int main (int argc, char* argv[]) {
 
     //Start at the global header(24 byte) and traverse the packets.
     size_t position = 24;
-    double packets = 0;
-    double bytes = 0;
+    uint64_t packets = 0;
+    uint64_t bytes = 0;
+    uint64_t ipv4Count = 0;
+    uint64_t ipv6Count = 0;
+    uint64_t otherCount = 0;
     while (position + 16 <= v.size()) {
         uint32_t length = read32Bit(v, position + 8, swap);
+        if (length >= 14) {
+            uint16_t etherType = read16Bit(v, position + 16 + 12);
+            if (etherType == 0x0800) {
+                ipv4Count++;
+            } else if (etherType == 0x86DD) {
+                ipv6Count++;
+            } else {
+                otherCount++;
+            }
+        }
         packets++;
         bytes+=length;
         position += 16 + length;
     }
-    printf("Packets Amount: %.0f\n", packets);
-    printf("Bytes Amount:   %.0f\n", bytes);
+    printf("Packets Amount:    %llu\n", (unsigned long long) packets);
+    printf("Bytes Amount:      %llu\n", (unsigned long long) bytes);
+    printf("ipv4Count Amount:  %llu\n", (unsigned long long) ipv4Count);
+    printf("ipv6Count Amount:  %llu\n", (unsigned long long) ipv6Count);
+    printf("otherCount Amount: %llu\n", (unsigned long long) otherCount);
 }
