@@ -71,6 +71,15 @@ int main (int argc, char* argv[]) {
         if (length >= 14) {
             uint16_t etherType = read16Bit(v, position + 16 + 12);
             if (etherType == 0x0800) {
+                if (length >= 34) {
+                    size_t ipStart = position + 16 + 14;
+                    uint8_t ipInfo = v[ipStart];
+                    uint8_t version = ipInfo >> 4;
+                    uint8_t ipHeaderLength = (ipInfo & 0x0F) * 4;
+                    printf("Source: %u.%u.%u.%u\n", v[ipStart+12], v[ipStart+13], v[ipStart+14], v[ipStart+15]);
+                    printf("Destination: %u.%u.%u.%u\n", v[ipStart+16], v[ipStart+17], v[ipStart+18], v[ipStart+19]);
+                    printf("Protocol: %u\n", v[ipStart+9]);
+                }
                 ipv4Count++;
             } else if (etherType == 0x86DD) {
                 ipv6Count++;
