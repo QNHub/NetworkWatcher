@@ -3,7 +3,41 @@
 #include <cstring>
 #include <fstream>
 #include <vector>
+#include <unordered_map>
+#include <utility>
 
+struct convoKey {
+    uint32_t ipSource;
+    uint32_t ipDest;
+    uint16_t portSource;
+    uint16_t portDest;
+    uint8_t protocol;
+    
+    
+    bool operator==(const convoKey& b) const {
+        return ipSource == b.ipSource &&
+               ipDest == b.ipDest &&
+               portSource == b.portSource &&
+               portDest == b.portDest &&
+               protocol == b.protocol;
+    }
+};
+
+namespace std {
+    template<> struct hash<convoKey> {
+        size_t operator()(const convoKey& k) const {
+            size_t h = std::hash<uint32_t>{}(k.ipSource);
+            h = h*31 + std::hash<uint32_t>{}(k.ipDest);
+            h = h*31 + k.portSource;
+            h = h*31 + k.portDest;
+            h = h*31 + k.protocol;
+            return h;
+        }
+    };
+}
+
+struct convoStats { uint64_t packets = 0; uint64_t bytes = 0; };
+std::unordered_map<convoKey, convoStats> convo;
 
 //Read the file format field.
 static uint32_t read32Bit(const std::vector<uint8_t>& file, size_t at, bool swap) {
@@ -23,6 +57,9 @@ static uint16_t read16Bit(const std::vector<uint8_t>& file, size_t at) {
     return (uint16_t(file[at]) << 8) | uint16_t(file[at + 1]);
 }
 
+static void printIp(uint32_t ip) {
+    printf("%u.%u.%u.%u", (ip>>24)&0xFF, (ip>>16)&0xFF, (ip>>8)&0xFF, ip&0xFF);
+}
 
 int main (int argc, char* argv[]) {
     // Grabs the header(8 bit)
@@ -77,14 +114,33 @@ int main (int argc, char* argv[]) {
                     uint8_t version = ipInfo >> 4;
                     uint8_t ipHeaderLength = (ipInfo & 0x0F) * 4;
                     size_t transportStart = ipStart + ipHeaderLength;
-                    printf("Source: %u.%u.%u.%u\n", v[ipStart+12], v[ipStart+13], v[ipStart+14], v[ipStart+15]);
-                    printf("Destination: %u.%u.%u.%u\n", v[ipStart+16], v[ipStart+17], v[ipStart+18], v[ipStart+19]);
-                    printf("Protocol: %u\n", v[ipStart+9]);
+                    uint32_t sourceIp = (uint32_t(v[ipStart+12]) << 24) | (uint32_t(v[ipStart+13]) << 16) 
+                    | (uint32_t(v[ipStart+14]) << 8) | uint32_t(v[ipStart+15]);
+                    uint32_t destinationIp = (uint32_t(v[ipStart+16]) << 24) | (uint32_t(v[ipStart+17]) << 16)
+                    | (uint32_t(v[ipStart+18]) << 8) |  uint32_t(v[ipStart+19]);
                     uint8_t protocol = v[ipStart+9];
                     if ((protocol == 6 || protocol == 17) && length >= 38) {
-                        printf("Source Port: %u\n", read16Bit(v, transportStart));
-                        printf("Dest Port: %u\n", read16Bit(v, transportStart + 2));
+                        uint16_t sourcePort = read16Bit(v, transportStart);
+                        uint16_t destinationPort = read16Bit(v, transportStart + 2);
+                        auto pairSource = std::pair<uint32_t, uint16_t>(sourceIp, sourcePort);
+                        auto pairDestination = std::pair<uint32_t, uint16_t>(destinationIp, destinationPort);
+                        convoKey key;
+                        if (pairSource <= pairDestination) {
+                            key.ipSource = sourceIp;
+                            key.portSource = sourcePort;
+                            key.ipDest = destinationIp;
+                            key.portDest = destinationPort;
+                        } else {
+                            key.ipSource = destinationIp;
+                            key.portSource = destinationPort;
+                            key.ipDest = sourceIp;
+                            key.portDest = sourcePort;
+                        }
+                        key.protocol = protocol;
+                        convo[key].packets++;
+                        convo[key].bytes += length;
                     }
+
                 }
                 ipv4Count++;
             } else if (etherType == 0x86DD) {
@@ -102,4 +158,15 @@ int main (int argc, char* argv[]) {
     printf("ipv4Count Amount:  %llu\n", (unsigned long long) ipv4Count);
     printf("ipv6Count Amount:  %llu\n", (unsigned long long) ipv6Count);
     printf("otherCount Amount: %llu\n", (unsigned long long) otherCount);
+    printf("Conversations: %zu\n", convo.size());
+    for (const auto& [key, stats] : convo) {
+        printf("  ");
+        printIp(key.ipSource);
+        printf(":%u <-> ", key.portSource);
+        printIp(key.ipDest);
+        printf(":%u  protocol %u  packets=%llu bytes=%llu\n",
+           key.portDest, key.protocol,
+           (unsigned long long)stats.packets,
+           (unsigned long long)stats.bytes);
+    }
 }
