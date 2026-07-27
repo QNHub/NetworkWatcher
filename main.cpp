@@ -98,6 +98,11 @@ int main (int argc, char* argv[]) {
 
     //Start at the global header(24 byte) and traverse the packets.
     size_t position = 24;
+    uint32_t layer = read32Bit(v, 20, swap);
+    if (layer != 1) {
+        fprintf(stderr, "Only ethernet is supported. This layer is %u.\n", layer);
+        return 1;
+    }
     uint64_t packets = 0;
     uint64_t bytes = 0;
     uint64_t ipv4Count = 0;
@@ -105,6 +110,9 @@ int main (int argc, char* argv[]) {
     uint64_t otherCount = 0;
     while (position + 16 <= v.size()) {
         uint32_t length = read32Bit(v, position + 8, swap);
+        if (position + 16 + length > v.size()) {
+            break;
+        }
         if (length >= 14) {
             uint16_t etherType = read16Bit(v, position + 16 + 12);
             if (etherType == 0x0800) {
@@ -113,7 +121,14 @@ int main (int argc, char* argv[]) {
                     uint8_t ipInfo = v[ipStart];
                     uint8_t version = ipInfo >> 4;
                     uint8_t ipHeaderLength = (ipInfo & 0x0F) * 4;
+                    if (ipHeaderLength < 20) {
+                        packets++;
+                        bytes += length;
+                        position+= 16 + length;
+                        continue;
+                    }
                     size_t transportStart = ipStart + ipHeaderLength;
+                    uint32_t layer = read32Bit(v, 20, swap);
                     uint32_t sourceIp = (uint32_t(v[ipStart+12]) << 24) | (uint32_t(v[ipStart+13]) << 16) 
                     | (uint32_t(v[ipStart+14]) << 8) | uint32_t(v[ipStart+15]);
                     uint32_t destinationIp = (uint32_t(v[ipStart+16]) << 24) | (uint32_t(v[ipStart+17]) << 16)
