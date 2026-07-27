@@ -5,6 +5,7 @@
 #include <vector>
 #include <unordered_map>
 #include <utility>
+#include <algorithm>
 
 struct convoKey {
     uint32_t ipSource;
@@ -200,8 +201,12 @@ int main (int argc, char* argv[]) {
     printf("ipv4Count Amount:  %llu\n", (unsigned long long) ipv4Count);
     printf("ipv6Count Amount:  %llu\n", (unsigned long long) ipv6Count);
     printf("otherCount Amount: %llu\n", (unsigned long long) otherCount);
-    printf("Conversations: %zu\n", convo.size());
-    for (const auto& [key, stats] : convo) {
+    std::vector<std::pair<convoKey, convoStats>> sortedConvo(convo.begin(), convo.end());
+    std::sort(sortedConvo.begin(), sortedConvo.end(), [](const auto& a, const auto& b) {
+        return a.second.bytes > b.second.bytes;
+    });
+    printf("Conversations(Biggest to smallest): %zu\n", convo.size());
+    for (const auto& [key, stats] : sortedConvo) {
         printf("  ");
         printIp(key.ipSource);
         printf(":%u <-> ", key.portSource);
