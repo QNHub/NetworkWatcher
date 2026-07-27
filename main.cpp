@@ -61,6 +61,26 @@ static void printIp(uint32_t ip) {
     printf("%u.%u.%u.%u", (ip>>24)&0xFF, (ip>>16)&0xFF, (ip>>8)&0xFF, ip&0xFF);
 }
 
+static void printDnsName(const std::vector<uint8_t>& v, size_t front, size_t end) {
+    for (int i = 0; i < 128; i++) {
+        if (front >= end) {
+            return;
+        }
+        uint8_t length = v[front];
+        if (length == 0) {
+            break;
+        }
+        front++;
+        if (front + length > end) {
+            return;
+        }
+        for (uint8_t j = 0; j < length; j++) putchar(v[front + j]);
+        putchar('.');
+        front += length;
+    }
+
+}
+
 int main (int argc, char* argv[]) {
     // Grabs the header(8 bit)
     if (argc < 2) {
@@ -128,7 +148,6 @@ int main (int argc, char* argv[]) {
                         continue;
                     }
                     size_t transportStart = ipStart + ipHeaderLength;
-                    uint32_t layer = read32Bit(v, 20, swap);
                     uint32_t sourceIp = (uint32_t(v[ipStart+12]) << 24) | (uint32_t(v[ipStart+13]) << 16) 
                     | (uint32_t(v[ipStart+14]) << 8) | uint32_t(v[ipStart+15]);
                     uint32_t destinationIp = (uint32_t(v[ipStart+16]) << 24) | (uint32_t(v[ipStart+17]) << 16)
@@ -140,6 +159,15 @@ int main (int argc, char* argv[]) {
                         auto pairSource = std::pair<uint32_t, uint16_t>(sourceIp, sourcePort);
                         auto pairDestination = std::pair<uint32_t, uint16_t>(destinationIp, destinationPort);
                         convoKey key;
+                        if (protocol == 17 && (sourcePort == 53 || destinationPort == 53)) {
+                            size_t start = transportStart + 8 + 12;
+                            size_t end = position + 16 + length;
+                            if (start < end) {
+                                printf("DNS: ");
+                                printDnsName(v, start, end);
+                                printf("\n");
+                            }
+                        }
                         if (pairSource <= pairDestination) {
                             key.ipSource = sourceIp;
                             key.portSource = sourcePort;
@@ -155,7 +183,6 @@ int main (int argc, char* argv[]) {
                         convo[key].packets++;
                         convo[key].bytes += length;
                     }
-
                 }
                 ipv4Count++;
             } else if (etherType == 0x86DD) {
